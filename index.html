@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spaced Repetition Quiz App</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Lucide icons as React components
+        const Download = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+        );
+
+        const Upload = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+        );
+
+        const Plus = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        );
+
+        const X = ({ className }) => (
+            <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        );
+
+        const Check = ({ className }) => (
+            <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+        );
+
+        const Circle = ({ className }) => (
+            <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+            </svg>
+        );
+
+        const ChevronUp = ({ className }) => (
+            <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"/>
+            </svg>
+        );
+
+        const ChevronDown = ({ className }) => (
+            <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        );
+
+        const Edit2 = ({ className }) => (
+            <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+            </svg>
+        );
+
+        const Trash2 = ({ className }) => (
+            <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+            </svg>
+        );
+
+        const SpacedRepetitionApp = () => {
+            const [mode, setMode] = useState('quiz');
+            const [questions, setQuestions] = useState([]);
+            const [currentQuestion, setCurrentQuestion] = useState(null);
+            const [selectedAnswer, setSelectedAnswer] = useState(null);
+            const [showFeedback, setShowFeedback] = useState(false);
+            const [showAddForm, setShowAddForm] = useState(false);
+            const [editingQuestion, setEditingQuestion] = useState(null);
+            const [sortBy, setSortBy] = useState(null);
+            const [sortOrder, setSortOrder] = useState('asc');
+
+            const [formData, setFormData] = useState({
+                question: '',
+                answers: ['', '', '', ''],
+                correctAnswer: 0
+            });
+
+            useEffect(() => {
+                const stored = localStorage.getItem('quizData');
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    setQuestions(data);
+                }
+            }, []);
+
+            useEffect(() => {
+                if (questions.length > 0) {
+                    localStorage.setItem('quizData', JSON.stringify(questions));
+                }
+            }, [questions]);
+
+            const calculateNextReview = (q, quality) => {
+                let { repetitions = 0, easiness = 2.5, interval = 1 } = q.sm2 || {};
+                
+                if (quality >= 3) {
+                    if (repetitions === 0) {
+                        interval = 1;
+                    } else if (repetitions === 1) {
+                        interval = 6;
+                    } else {
+                        interval = Math.round(interval * easiness);
+                    }
+                    repetitions += 1;
+                } else {
+                    repetitions = 0;
+                    interval = 1;
+                }
+                
+                easiness = easiness + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+                if (easiness < 1.3) easiness = 1.3;
+                
+                const nextReview = Date.now() + (interval * 24 * 60 * 60 * 1000);
+                
+                return {
+                    repetitions,
+                    easiness,
+                    interval,
+                    nextReview
+                };
+            };
+
+            const selectNextQuestion = () => {
+                if (questions.length === 0) return null;
+                
+                const now = Date.now();
+                const unanswered = questions.filter(q => !q.attempts || q.attempts.length === 0);
+                
+                if (unanswered.length > 0) {
+                    return unanswered[Math.floor(Math.random() * unanswered.length)];
+                }
+                
+                const due = questions.filter(q => !q.sm2?.nextReview || q.sm2.nextReview <= now);
+                
+                if (due.length > 0) {
+                    due.sort((a, b) => {
+                        const aRate = a.attempts.filter(att => att.correct).length / a.attempts.length;
+                        const bRate = b.attempts.filter(att => att.correct).length / b.attempts.length;
+                        return aRate - bRate;
+                    });
+                    return due[0];
+                }
+                
+                const sorted = [...questions].sort((a, b) => (a.sm2?.nextReview || 0) - (b.sm2?.nextReview || 0));
+                return sorted[0];
+            };
+
+            useEffect(() => {
+                if (mode === 'quiz' && !currentQuestion && questions.length > 0) {
+                    setCurrentQuestion(selectNextQuestion());
+                }
+            }, [mode, questions, currentQuestion]);
+
+            const handleAnswerSelect = (index) => {
+                if (showFeedback) return;
+                
+                setSelectedAnswer(index);
+                setShowFeedback(true);
+                
+                const isCorrect = index === currentQuestion.correctAnswer;
+                const quality = isCorrect ? 5 : 0;
+                
+                const updatedQuestions = questions.map(q => {
+                    if (q.id === currentQuestion.id) {
+                        const newAttempt = {
+                            correct: isCorrect,
+                            timestamp: Date.now()
+                        };
+                        
+                        const attempts = [...(q.attempts || []), newAttempt];
+                        const sm2 = calculateNextReview(q, quality);
+                        
+                        return {
+                            ...q,
+                            attempts,
+                            sm2
+                        };
+                    }
+                    return q;
+                });
+                
+                setQuestions(updatedQuestions);
+                
+                setTimeout(() => {
+                    setShowFeedback(false);
+                    setSelectedAnswer(null);
+                    const nextQ = selectNextQuestion();
+                    setCurrentQuestion(nextQ);
+                }, 2000);
+            };
+
+            const addQuestion = () => {
+                const newQuestion = {
+                    id: Date.now(),
+                    question: formData.question,
+                    answers: formData.answers,
+                    correctAnswer: formData.correctAnswer,
+                    attempts: [],
+                    sm2: null
+                };
+                
+                setQuestions([...questions, newQuestion]);
+                setFormData({ question: '', answers: ['', '', '', ''], correctAnswer: 0 });
+                setShowAddForm(false);
+            };
+
+            const updateQuestion = () => {
+                const updatedQuestions = questions.map(q => {
+                    if (q.id === editingQuestion.id) {
+                        return {
+                            ...q,
+                            question: formData.question,
+                            answers: formData.answers,
+                            correctAnswer: formData.correctAnswer
+                        };
+                    }
+                    return q;
+                });
+                
+                setQuestions(updatedQuestions);
+                setEditingQuestion(null);
+                setFormData({ question: '', answers: ['', '', '', ''], correctAnswer: 0 });
+            };
+
+            const deleteQuestion = (id) => {
+                setQuestions(questions.filter(q => q.id !== id));
+            };
+
+            const startEdit = (q) => {
+                setEditingQuestion(q);
+                setFormData({
+                    question: q.question,
+                    answers: [...q.answers],
+                    correctAnswer: q.correctAnswer
+                });
+            };
+
+            const exportData = () => {
+                const dataStr = JSON.stringify(questions, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'quiz-data.json';
+                link.click();
+            };
+
+            const importData = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            setQuestions(data);
+                        } catch (error) {
+                            alert('Invalid JSON file');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+
+            const getProgressIcons = (q) => {
+                const attempts = q.attempts || [];
+                const last5 = attempts.slice(-5);
+                const icons = [];
+                
+                for (let i = 0; i < 5; i++) {
+                    if (i < last5.length) {
+                        icons.push(last5[i].correct ? 'correct' : 'incorrect');
+                    } else {
+                        icons.push('empty');
+                    }
+                }
+                
+                return icons;
+            };
+
+            const getSuccessRate = (q) => {
+                if (!q.attempts || q.attempts.length === 0) return 0;
+                const correct = q.attempts.filter(a => a.correct).length;
+                return Math.round((correct / q.attempts.length) * 100);
+            };
+
+            const sortQuestions = (by) => {
+                if (sortBy === by) {
+                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortBy(by);
+                    setSortOrder('asc');
+                }
+            };
+
+            const getSortedQuestions = () => {
+                if (!sortBy) return questions;
+                
+                return [...questions].sort((a, b) => {
+                    let aVal, bVal;
+                    
+                    if (sortBy === 'successRate') {
+                        aVal = getSuccessRate(a);
+                        bVal = getSuccessRate(b);
+                    } else if (sortBy === 'attempts') {
+                        aVal = a.attempts?.length || 0;
+                        bVal = b.attempts?.length || 0;
+                    }
+                    
+                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+                });
+            };
+
+            const totalAttempts = questions.reduce((sum, q) => sum + (q.attempts?.length || 0), 0);
+            const avgSuccessRate = questions.length > 0 
+                ? Math.round(questions.reduce((sum, q) => sum + getSuccessRate(q), 0) / questions.length)
+                : 0;
+            const unansweredCount = questions.filter(q => !q.attempts || q.attempts.length === 0).length;
+            const weakQuestions = questions
+                .filter(q => q.attempts && q.attempts.length >= 3)
+                .sort((a, b) => getSuccessRate(a) - getSuccessRate(b))
+                .slice(0, 5);
+
+            const ProgressIcon = ({ type }) => {
+                if (type === 'correct') return <Check className="w-5 h-5 text-green-600" />;
+                if (type === 'incorrect') return <X className="w-5 h-5 text-red-600" />;
+                return <Circle className="w-5 h-5 text-gray-300" />;
+            };
+
+            return (
+                <div className="min-h-screen bg-white p-8">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="flex justify-between items-center mb-8">
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setMode('quiz')}
+                                    className={`px-6 py-2 font-medium ${
+                                        mode === 'quiz'
+                                            ? 'bg-black text-white'
+                                            : 'bg-white text-black border-2 border-black'
+                                    }`}
+                                >
+                                    Quiz
+                                </button>
+                                <button
+                                    onClick={() => setMode('library')}
+                                    className={`px-6 py-2 font-medium ${
+                                        mode === 'library'
+                                            ? 'bg-black text-white'
+                                            : 'bg-white text-black border-2 border-black'
+                                    }`}
+                                >
+                                    Library
+                                </button>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={exportData}
+                                    className="p-2 border-2 border-black hover:bg-gray-100"
+                                    title="Export Data"
+                                >
+                                    <Download />
+                                </button>
+                                <label className="p-2 border-2 border-black hover:bg-gray-100 cursor-pointer" title="Import Data">
+                                    <Upload />
+                                    <input type="file" onChange={importData} className="hidden" accept=".json" />
+                                </label>
+                            </div>
+                        </div>
+
+                        {mode === 'quiz' && (
+                            <div>
+                                {questions.length === 0 ? (
+                                    <div className="text-center py-20">
+                                        <p className="text-2xl mb-4">No questions yet!</p>
+                                        <button
+                                            onClick={() => {
+                                                setMode('library');
+                                                setShowAddForm(true);
+                                            }}
+                                            className="px-6 py-3 bg-black text-white font-medium"
+                                        >
+                                            Add Your First Question
+                                        </button>
+                                    </div>
+                                ) : currentQuestion ? (
+                                    <div>
+                                        <div className="flex justify-center gap-2 mb-8">
+                                            {getProgressIcons(currentQuestion).map((type, i) => (
+                                                <div key={i} className="w-10 h-10 rounded-full border-2 border-gray-300 flex items-center justify-center">
+                                                    <ProgressIcon type={type} />
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="bg-gray-50 p-8 mb-6 border-2 border-black">
+                                            <h2 className="text-2xl font-medium mb-8">{currentQuestion.question}</h2>
+                                            
+                                            <div className="space-y-3">
+                                                {currentQuestion.answers.map((answer, index) => (
+                                                    <button
+                                                        key={index}
+                                                        onClick={() => handleAnswerSelect(index)}
+                                                        disabled={showFeedback}
+                                                        className={`w-full text-left p-4 border-2 transition-all ${
+                                                            showFeedback && index === currentQuestion.correctAnswer
+                                                                ? 'border-green-600 border-4'
+                                                                : showFeedback && index === selectedAnswer && index !== currentQuestion.correctAnswer
+                                                                ? 'bg-red-50 border-red-600'
+                                                                : 'border-black hover:bg-gray-100'
+                                                        } ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}
+                                                    >
+                                                        {answer}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+                        )}
+
+                        {mode === 'library' && (
+                            <div>
+                                {!showAddForm && !editingQuestion && (
+                                    <div className="mb-8">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <div>
+                                                <h2 className="text-3xl font-bold mb-2">Question Library</h2>
+                                                <p className="text-gray-600">Total Questions Answered: {totalAttempts}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowAddForm(true)}
+                                                className="flex items-center gap-2 px-6 py-3 bg-black text-white font-medium"
+                                            >
+                                                <Plus />
+                                                Add Question
+                                            </button>
+                                        </div>
+
+                                        <div className="grid grid-cols-4 gap-4 mb-8 p-4 bg-gray-50 border-2 border-black">
+                                            <div>
+                                                <p className="text-sm text-gray-600">Total Questions</p>
+                                                <p className="text-2xl font-bold">{questions.length}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-600">Avg Success Rate</p>
+                                                <p className="text-2xl font-bold">{avgSuccessRate}%</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-600">Not Attempted</p>
+                                                <p className="text-2xl font-bold">{unansweredCount}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-600">Total Attempts</p>
+                                                <p className="text-2xl font-bold">{totalAttempts}</p>
+                                            </div>
+                                        </div>
+
+                                        {weakQuestions.length > 0 && (
+                                            <div className="mb-8 p-4 border-2 border-red-600 bg-red-50">
+                                                <h3 className="font-bold mb-2">Focus Areas (Lowest Success Rates)</h3>
+                                                <ul className="space-y-1">
+                                                    {weakQuestions.map(q => (
+                                                        <li key={q.id} className="text-sm">
+                                                            {q.question.substring(0, 60)}... - {getSuccessRate(q)}%
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        <div className="border-2 border-black">
+                                            <div className="grid grid-cols-12 gap-4 p-4 bg-gray-50 border-b-2 border-black font-bold">
+                                                <div className="col-span-5">Question</div>
+                                                <div className="col-span-2">Last 5</div>
+                                                <div className="col-span-2 flex items-center gap-1 cursor-pointer" onClick={() => sortQuestions('successRate')}>
+                                                    Success Rate
+                                                    {sortBy === 'successRate' && (sortOrder === 'asc' ? <ChevronUp /> : <ChevronDown />)}
+                                                </div>
+                                                <div className="col-span-1 flex items-center gap-1 cursor-pointer" onClick={() => sortQuestions('attempts')}>
+                                                    Attempts
+                                                    {sortBy === 'attempts' && (sortOrder === 'asc' ? <ChevronUp /> : <ChevronDown />)}
+                                                </div>
+                                                <div className="col-span-2 text-right">Actions</div>
+                                            </div>
+
+                                            {getSortedQuestions().map(q => (
+                                                <div key={q.id} className="grid grid-cols-12 gap-4 p-4 border-b border-gray-200 items-center hover:bg-gray-50">
+                                                    <div className="col-span-5 font-medium">{q.question}</div>
+                                                    <div className="col-span-2 flex gap-1">
+                                                        {getProgressIcons(q).map((type, i) => (
+                                                            <ProgressIcon key={i} type={type} />
+                                                        ))}
+                                                    </div>
+                                                    <div className="col-span-2">{getSuccessRate(q)}%</div>
+                                                    <div className="col-span-1">{q.attempts?.length || 0}</div>
+                                                    <div className="col-span-2 flex gap-2 justify-end">
+                                                        <button
+                                                            onClick={() => startEdit(q)}
+                                                            className="p-2 border border-black hover:bg-gray-100"
+                                                        >
+                                                            <Edit2 />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => deleteQuestion(q.id)}
+                                                            className="p-2 border border-red-600 text-red-600 hover:bg-red-50"
+                                                        >
+                                                            <Trash2 />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(showAddForm || editingQuestion) && (
+                                    <div className="border-2 border-black p-8">
+                                        <h2 className="text-2xl font-bold mb-6">
+                                            {editingQuestion ? 'Edit Question' : 'Add New Question'}
+                                        </h2>
+                                        
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block font-medium mb-2">Question</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.question}
+                                                    onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+                                                    className="w-full p-3 border-2 border-black"
+                                                    placeholder="Enter your question"
+                                                />
+                                            </div>
+
+                                            {formData.answers.map((answer, index) => (
+                                                <div key={index}>
+                                                    <label className="block font-medium mb-2">Answer {index + 1}</label>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="radio"
+                                                            checked={formData.correctAnswer === index}
+                                                            onChange={() => setFormData({ ...formData, correctAnswer: index })}
+                                                            className="mt-3"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={answer}
+                                                            onChange={(e) => {
+                                                                const newAnswers = [...formData.answers];
+                                                                newAnswers[index] = e.target.value;
+                                                                setFormData({ ...formData, answers: newAnswers });
+                                                            }}
+                                                            className="flex-1 p-3 border-2 border-black"
+                                                            placeholder={`Enter answer ${index + 1}`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                            <div className="flex gap-4 pt-4">
+                                                <button
+                                                    onClick={editingQuestion ? updateQuestion : addQuestion}
+                                                    disabled={!formData.question || formData.answers.some(a => !a)}
+                                                    className="px-6 py-3 bg-black text-white font-medium disabled:opacity-50"
+                                                >
+                                                    {editingQuestion ? 'Update Question' : 'Add Question'}
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowAddForm(false);
+                                                        setEditingQuestion(null);
+                                                        setFormData({ question: '', answers: ['', '', '', ''], correctAnswer: 0 });
+                                                    }}
+                                                    className="px-6 py-3 border-2 border-black font-medium"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SpacedRepetitionApp />);
+    </script>
+</body>
+</html>
